@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Whimsichat</title>
+    <style>
+      :root { --orange: #FFAC4F; --bg: #000 }
+      html, body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--orange);
+        font-family: monospace;
+        overflow: hidden;
+      }
+      #layout {
+        display: grid;
+        grid-template-columns: 360px 1fr;
+        grid-template-rows: 1fr auto;
+        height: 100%;
+        align-items: start;
+      }
+      #box {
+        grid-column: 1;
+        grid-row: 1;
+        padding: 40px 10px 10px 10px;
+        overflow-y: auto;
+        background: black;
+        white-space: pre-wrap;
+        z-index: 5;
+      }
+      #onlineCount {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 360px;
+        padding: 10px;
+        color: var(--orange);
+        font-weight: 700;
+        z-index: 10;
+        pointer-events: none;
+        background: transparent;
+      }
+      #controls-container {
+        grid-column: 1;
+        grid-row: 2;
+        border-top: 1px solid var(--orange);
+        padding: 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        background: black;
+        transform: translateY(-8px);
+      }
+      #controls-container .controls-top {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      #game {
+        grid-column: 2;
+        grid-row: 1 / span 2;
+        position: relative;
+        overflow: hidden;
+        background: url('images/space.jpg') center/cover no-repeat;
+        width: 1200px;
+        height: 850px;
+        margin: auto;
+      }
+      .world {
+        position: absolute;
+        width: 1500px;
+        height: 1500px;
+        background-size: contain;
+        background-repeat: no-repeat;
+        filter: brightness(.5) blur(15px);
+        top: 100%;
+        left: 50%;
+        transform: translate(-50%,-50%);
+      }
+      #trees {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      .object {
+        position: absolute;
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center bottom;
+        pointer-events: none;
+      }
+      @keyframes floaty {
+        0% { transform: translateY(0); }
+        50% { transform: translateY(-12px); }
+        100% { transform: translateY(0); }
+      }
+      .object.ufo {
+        animation: floaty 3.6s ease-in-out infinite;
+        transform-origin: center;
+      }
+      .player {
+        position: absolute;
+        width: 100px;
+        height: 100px;
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center bottom;
+        z-index: 1000;
+        transition: left .04s linear, top .04s linear, transform .1s linear;
+        cursor: pointer;
+      }
+      .playerName {
+        position: absolute;
+        width: 100%;
+        top: 110px;
+        text-align: center;
+        font-size: 14px;
+        pointer-events: none;
+      }
+      .playerTitle {
+        position: absolute;
+        width: 100%;
+        top: 125px;
+        text-align: center;
+        font-size: 12px;
+        font-style: italic;
+        color: rgba(255,172,79,.8);
+        pointer-events: none;
+      }
+      .chat-name {
+        font-weight: 700;
+        margin-right: 6px;
+        cursor: pointer;
+      }
+      .chat-name.helper {
+        color: #5bb25b;
+      }
+      .chat-time {
+        font-size: 11px;
+        opacity: .6;
+        margin-left: 8px;
+      }
+      .chat-bubble {
+        position: absolute;
+        left: 0;
+        transform: translateX(-50%) translateY(15px);
+        transform-origin: bottom center;
+        background: #fff;
+        color: #000;
+        border: 1px solid var(--orange);
+        padding: 8px 10px;
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.2;
+        white-space: normal;
+        word-break: break-word;
+        max-width: 420px;
+        z-index: 2000;
+        pointer-events: none;
+        will-change: transform, opacity;
+        transition: opacity .18s linear, transform .08s linear;
+        opacity: 1;
+      }
+      .chat-bubble::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -8px;
+        transform: translateX(-50%);
+        width: 0;
+        height: 0;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-top: 6px solid #fff;
+        pointer-events: none;
+      }
+      .chat-bubble.hide {
+        opacity: 0;
+        transform: translateX(-50%) translateY(0);
+      }
+      .system {
+        color: #ffd27d;
+        font-style: italic;
+      }
+      .room-button {
+        background: black;
+        color: var(--orange);
+        border: 1px solid var(--orange);
+        padding: 6px 10px;
+        font-size: 12px;
+        font-family: monospace;
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .room-button:hover {
+        background: #1a0e00;
+      }
+      .item {
+        position: absolute;
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: center;
+        pointer-events: none;
+        z-index: 1500;
+        transform-origin: center;
+        display: block;
+        animation: floaty 3.6s ease-in-out infinite;
+      }
+      .item.special {
+        animation: floaty 3.6s ease-in-out infinite;
+        box-shadow: 0 6px 18px rgba(255,172,79,0.18), 0 0 6px rgba(255,172,79,0.12) inset;
+      }
+      #inventory {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 240px;
+        background: rgba(0,0,0,.9);
+        border: 1px solid var(--orange);
+        padding: 10px;
+        display: none;
+        z-index: 99999;
+      }
+      #favoritesPanel {
+        position: absolute;
+        top: 80px;
+        right: 20px;
+        width: 260px;
+        background: rgba(0,0,0,.95);
+        border: 1px solid var(--orange);
+        padding: 10px;
+        display: none;
+        z-index: 99999;
+        max-height: 420px;
+        overflow: auto;
+      }
+      #playerCard {
+        position: absolute;
+        top: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 320px;
+        background: rgba(0,0,0,.95);
+        border: 1px solid var(--orange);
+        padding: 10px;
+        display: none;
+        z-index: 99999;
+        max-height: 420px;
+        overflow: auto;
+      }
+      #playerCard input,
+      #playerCard textarea {
+        width: 100%;
+        background: black;
+        color: var(--orange);
+        border: 1px solid var(--orange);
+        padding: 6px;
+        margin-bottom: 6px;
+        font-family: monospace;
+      }
+      #playerCard #closeCard {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: black;
+        color: var(--orange);
+        border: 1px solid var(--orange);
+        cursor: pointer;
+        padding: 2px 6px;
+      }
+      #cardInventory {
+        margin-top: 8px;
+        border-top: 1px solid var(--orange);
+        padding-top: 8px;
+        color: var(--orange);
+      }
+      #cardInventory div { margin-bottom: 6px; }
+      #guestbookPanel {
+        position: absolute;
+        top: 80px;
+        right: 80px;
+        width: 360px;
+        background: rgba(0,0,0,.95);
+        border: 1px solid var(--orange);
+        padding: 10px;
+        display: none;
+        z-index: 999999;
+        max-height: 560px;
+        overflow: hidden;
+      }
+      #guestbookPanel h3 { margin: 0 0 8px 0; color: var(--orange); }
+      #guestbookList {
+        max-height: 360px;
+        overflow: auto;
+        padding-right: 6px;
+        margin-bottom: 8px;
+      }
+      #guestbookPanel .entry {
+        background: rgba(255,172,79,0.03);
+        border: 1px solid rgba(255,172,79,0.06);
+        padding: 8px;
+        margin-bottom: 6px;
+        border-radius: 6px;
+        color: var(--orange);
+        font-size: 13px;
+      }
+      #guestbookPanel textarea {
+        width: 100%;
+        height: 80px;
+        background: black;
+        color: var(--orange);
+        border: 1px solid var(--orange);
+        padding: 6px;
+        font-family: monospace;
+        margin-bottom: 6px;
+      }
+      .gb-delete {
+        background: transparent;
+        border: 1px solid rgba(255,172,79,0.12);
+        color: var(--orange);
+        padding: 4px 6px;
+        font-size: 12px;
+        cursor: pointer;
+        border-radius: 4px;
+        margin-left: 8px;
+      }
+      #mobileModal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.88);
+        z-index: 99999;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-content {
+        background: black;
+        border: 2px solid var(--orange);
+        color: var(--orange);
+        padding: 20px;
+        max-width: 360px;
+        text-align: center;
+        border-radius: 8px;
+        font-size: 16px;
+        font-family: monospace;
+      }
+      .modal-content p { margin: 0 0 12px 0; line-height: 1.3; }
+      .modal-content button {
+        background: var(--orange);
+        color: #000;
+        border: none;
+        padding: 8px 12px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-weight: bold;
+        font-family: monospace;
+      }
+      #inventory .specials {
+        margin-top: 8px;
+        border-top: 1px dashed rgba(255,172,79,0.12);
+        padding-top: 8px;
+      }
+      .inv-special {
+        display:flex;
+        gap:8px;
+        align-items:center;
+        margin-bottom:6px;
+      }
+      .inv-special img {
+        width:36px;height:36px;object-fit:contain;border-radius:6px;border:0px solid rgba(255,172,79,0.12);
+      }
+      .inv-special .inv-name { font-size:13px;color:var(--orange); }
+      .player.floaty {
+        animation: floaty 3.6s ease-in-out infinite;
+        transform-origin: center;
+      }
+      .chat-bubble.afk {
+        padding: 6px 8px;
+        font-size: 12px;
+        max-width: 120px;
+        border-radius: 10px;
+        opacity: 1;
+        transition: none;
+        animation: floaty 3.6s ease-in-out infinite;
+        background: #fff;
+        color: #000;
+      }
+      .helper-badge {
+        position: absolute;
+        transform: translateX(-50%) translateY(40px);
+        background:  #5bb25b;
+        color: #111;
+        padding: 4px 8px;
+        border-radius: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        white-space: nowrap;
+        pointer-events: none;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        z-index: 20000;
+      }
+      .gate {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 40px;
+        height: 88px;
+        pointer-events: none;
+        z-index: 12000;
+        border-radius: 8px;
+        background: linear-gradient(180deg, rgba(255,172,79,0.16), rgba(255,172,79,0.04));
+        display: block;
+        text-align: center;
+      }
+      .gate-left {
+        left: 10px;
+        border-right: 2px solid var(--orange);
+        box-shadow: 0 0 14px rgba(255,172,79,0.08);
+      }
+      .gate-right {
+        right: 10px;
+        border-left: 2px solid var(--orange);
+        box-shadow: 0 0 14px rgba(255,172,79,0.08);
+      }
+      .gate::before {
+        content: "◀";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%,-50%);
+        color: var(--orange);
+        font-weight: 900;
+        font-size: 34px;
+        text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+      }
+      .gate-right::before {
+        content: "▶";
+      }
+      .panel-close {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        background: black;
+        color: var(--orange);
+        border: 1px solid var(--orange);
+        cursor: pointer;
+        padding: 2px 6px;
+        font-size: 12px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="mobileModal" role="dialog" aria-modal="true">
+      <div class="modal-content">
+        <p>Whimsichat is not currently available on mobile, please come back on a computer!</p>
+        <button id="mobileOk">Go to homepage</button>
+      </div>
+    </div>
+
+    <div id="layout">
+      <div id="onlineCount">Online: 0</div>
+      <div id="box"></div>
+
+      <div id="game">
+        <div class="world"></div>
+        <div id="trees"></div>
+
+        <div id="inventory">
+          <button id="closeInventory" class="panel-close">X</button>
+          <strong>Inventory</strong>
+          <div id="inventoryContent"></div>
+          <div class="specials">
+            <strong>Special Items</strong>
+            <div id="inventorySpecials"></div>
+          </div>
+        </div>
+
+        <div id="favoritesPanel">
+          <button id="closeFavorites" class="panel-close">X</button>
+          <strong>Favorites</strong>
+          <div id="favoritesList" style="margin-top:8px"></div>
+        </div>
+
+        <div id="playerCard">
+          <button id="closeCard">X</button>
+          <strong id="cardName"></strong>
+          <input id="cardTitleInput" maxlength="50" placeholder="Title">
+          <textarea id="cardBioInput" rows="4" maxlength="500" placeholder="Bio"></textarea>
+
+          <div style="margin-top:8px">
+            <button id="favToggle" class="room-button" style="display:none">Favorite</button>
+            <button id="openGuestbookFromCard" class="room-button" style="display:inline-block;margin-left:8px">Open Guestbook</button>
+          </div>
+
+          <div id="cardInventory">
+            <strong>Inventory</strong>
+            <div id="cardInventoryContent"></div>
+            <div id="cardSpecialsContent"></div>
+          </div>
+        </div>
+
+        <div id="guestbookPanel">
+          <button id="closeGuestbook" class="room-button" style="position:absolute;right:8px;top:8px">X</button>
+          <h3 id="guestbookTitle">Guestbook</h3>
+          <div id="guestbookList"></div>
+          <div id="guestbookWrite">
+            <div id="guestbookNotice" style="opacity:.8;margin-bottom:6px;font-size:13px"></div>
+            <textarea id="guestbookInput" placeholder="Write a message..."></textarea>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button id="guestbookSubmit" class="room-button">Give Note?</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="controls-container">
+        <div class="controls-top">
+          <button class="room-button" id="inventoryBtn">Inventory</button>
+          <button id="favoritesBtn" class="room-button">Favorites</button>
+          <button id="guestbookBtn" class="room-button">Guestbook</button>
+        </div>
+        <input id="nameInput" placeholder="name">
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="setNameBtn" class="room-button">Set Name</button>
+          <input id="nameColorPicker" type="color" value="#FFAC4F">
+        </div>
+        <input id="messageInput" placeholder="Chat? (Enter to send)">
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="room-button" onclick="gotoRoom('lobby')">Room 1</button>
+          <button class="room-button" onclick="gotoRoom('trees')">Room 2</button>
+          <button class="room-button" onclick="gotoRoom('space')">Room 3</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/playroom@0.0.45/dist/index.global.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
